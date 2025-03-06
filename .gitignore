@@ -1,0 +1,26 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+*.cfg
+
+# IDE
+.vscode/
+.idea/
+
+# Project specific
+amazon_docs_summary.txt
+tree.txt
+*.txt
+!requirements.txt
+
+# Windows
+desktop.ini
+Thumbs.db
