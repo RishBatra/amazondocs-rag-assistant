@@ -23,6 +23,7 @@ tree.txt
 !requirements.txt
 pgvector/
 share/
+example.py
 
 # Windows
 desktop.ini
