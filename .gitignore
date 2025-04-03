@@ -16,9 +16,10 @@ pyvenv.cfg
 .idea/
 
 # Project specific
+*.txt
+*.log
 amazon_docs_summary.txt
 tree.txt
-*.txt
 !requirements.txt
 
 # Windows
