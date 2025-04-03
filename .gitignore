@@ -21,7 +21,9 @@ pyvenv.cfg
 amazon_docs_summary.txt
 tree.txt
 !requirements.txt
+pgvector/
 
 # Windows
 desktop.ini
 Thumbs.db
+
