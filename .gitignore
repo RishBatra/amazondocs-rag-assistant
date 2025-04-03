@@ -22,6 +22,7 @@ amazon_docs_summary.txt
 tree.txt
 !requirements.txt
 pgvector/
+share/
 
 # Windows
 desktop.ini
