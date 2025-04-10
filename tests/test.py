@@ -221,13 +221,14 @@ def test_database_connection():
     try:
         with processor.conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO document_chunks (title, content, embedding)
-                VALUES (%s, %s, %s)
+                INSERT INTO document_chunks (parent_id, title, content, embedding, metadata)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
             """, (
                 'test_title',
                 'test_content',
-                [0.1] * 1024  # Match BAAI model dimensions
+                [0.1] * 1024,  # Match BAAI model dimensions
+                'test_metadata'
             ))
             
             result = cur.fetchone()

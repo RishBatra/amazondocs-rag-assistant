@@ -68,9 +68,7 @@ class TestDocumentProcessor(unittest.TestCase):
         """
         
         test_metadata = {
-            'source': 'test_url',
-            'type': 'test_doc',
-            'scraped_at': '2024-01-01'
+            'source': 'test_url'
         }
         
         try:
@@ -92,9 +90,7 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertIsNotNone(content, "Failed to scrape content from URL")
         
         test_metadata = {
-            'source': test_url,
-            'type': 'api_documentation',
-            'scraped_at': '2024-01-01'
+            'source': test_url
         }
         
         try:
@@ -116,6 +112,63 @@ class TestDocumentProcessor(unittest.TestCase):
             self.assertIn('content', results[0])
             self.assertIn('metadata', results[0])
             self.assertIn('distance', results[0])
+
+    def setup_database(self):
+        try:
+            with self.conn.cursor() as cur:
+                # Enable vector extension
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                
+                # Drop existing table if it exists
+                cur.execute("DROP TABLE IF EXISTS table_blocks;")
+                cur.execute("DROP TABLE IF EXISTS json_blocks;")
+                cur.execute("DROP TABLE IF EXISTS document_chunks;")
+                
+                # Create document_chunks table without title
+                cur.execute("""
+                    CREATE TABLE document_chunks (
+                        id SERIAL PRIMARY KEY,
+                        parent_id INTEGER REFERENCES document_chunks(id),
+                        content TEXT,
+                        embedding vector(1024),
+                        metadata JSONB
+                    );
+                """)
+                
+                # Create other tables (unchanged)
+                cur.execute("""
+                    CREATE TABLE json_blocks (
+                        id SERIAL PRIMARY KEY,
+                        chunk_id INTEGER REFERENCES document_chunks(id),
+                        json_content JSONB,
+                        metadata JSONB
+                    );
+                """)
+                
+                cur.execute("""
+                    CREATE TABLE table_blocks (
+                        id SERIAL PRIMARY KEY,
+                        chunk_id INTEGER REFERENCES document_chunks(id),
+                        table_content JSONB,
+                        headers TEXT[],
+                        metadata JSONB
+                    );
+                """)
+                
+                # Create index for similarity search
+                cur.execute("""
+                    CREATE INDEX ON document_chunks 
+                    USING ivfflat (embedding vector_l2_ops);
+                """)
+                
+                self.conn.commit()
+                self.logger.info("Database schema created successfully")
+                return True
+                
+        except Exception as e:
+            self.conn.rollback()
+            self.logger.error(f"Failed to set up database: {str(e)}", exc_info=True)
+            return False
 
 if __name__ == '__main__':
     # Create a test loader

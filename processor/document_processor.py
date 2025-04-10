@@ -65,9 +65,7 @@ class DocumentProcessor:
                 self.process_document(
                     content=content,
                     metadata={
-                        'source': url,
-                        'type': 'api_documentation',
-                        'scraped_at': time.strftime('%Y-%m-%d %H:%M:%S')
+                        'source': url
                     }
                 )
                 print(f"Successfully processed {url}")
@@ -166,7 +164,14 @@ class DocumentProcessor:
         try:
             self.logger.debug(f"Processing document from: {metadata.get('source', 'unknown')}")
             self.logger.debug(f"Content length: {len(content)}")
-            
+            # Add ### before any pattern that matches the regex
+            pattern = r"(`\S+`)\s*(\S+)\s*\1\s*\2"
+            matches = re.finditer(pattern, content)
+            offset = 0
+            for match in matches:
+                start = match.start() + offset
+                content = content[:start] + "### " + content[start:]
+                offset += 4  # Length of "### "
             # Create chunks
             splitter = MarkdownHeaderTextSplitter(
                 headers_to_split_on=[
@@ -190,9 +195,15 @@ class DocumentProcessor:
                     self.logger.debug(f"Chunk level: {chunk.metadata.get('level')}")
                     self.logger.debug(f"Parent ID: {parent_id}")
 
-                    # Extract JSON and tables first
-                    json_blocks = self._extract_json_blocks(chunk.page_content)
-                    tables = self._extract_tables(chunk.page_content)
+                    # Extract JSON and tables first and add chunk metadata to them
+                    json_blocks = [
+                        {**block, 'metadata': chunk.metadata} 
+                        for block in self._extract_json_blocks(chunk.page_content)
+                    ]
+                    tables = [
+                        {**block, 'metadata': chunk.metadata} 
+                        for block in self._extract_tables(chunk.page_content)
+                    ]
                     
                     # Remove JSON and tables from text for chunking
                     clean_text = chunk.page_content
@@ -204,15 +215,14 @@ class DocumentProcessor:
                     
                     # Now use the embedding in the insert
                     cur.execute("""
-                        INSERT INTO document_chunks (parent_id, title, content, embedding, metadata)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO document_chunks (parent_id, content, embedding, metadata)
+                        VALUES (%s, %s, %s, %s)
                         RETURNING id
                     """, (
                         parent_id,
-                        chunk.metadata.get('title', ''),
-                        chunk.page_content,
+                        clean_text,
                         embedding,
-                        Json(metadata)
+                        Json(chunk.metadata)
                     ))
                     
                     result = cur.fetchone()
@@ -228,7 +238,7 @@ class DocumentProcessor:
                     
                     # Store associated JSON blocks
                     for json_block in json_blocks:
-                        if '[EXTRACTED_CONTENT]' in chunk.page_content:
+                        if '[EXTRACTED_CONTENT]' in clean_text:
                             cur.execute("""
                                 INSERT INTO json_blocks (chunk_id, json_content, metadata)
                                 VALUES (%s, %s, %s)
@@ -236,7 +246,7 @@ class DocumentProcessor:
 
                     # Store associated tables
                     for table in tables:
-                        if '[EXTRACTED_CONTENT]' in chunk.page_content:
+                        if '[EXTRACTED_CONTENT]' in clean_text:
                             cur.execute("""
                                 INSERT INTO table_blocks (chunk_id, table_content, headers, metadata)
                                 VALUES (%s, %s, %s, %s)
@@ -246,6 +256,7 @@ class DocumentProcessor:
                                 table['headers'],
                                 Json(metadata)
                             ))
+                    self.conn.commit()
 
             self.conn.commit()
         except Exception as e:
@@ -338,8 +349,7 @@ class DocumentProcessor:
                         title TEXT,
                         content TEXT,
                         embedding vector(1024),
-                        metadata JSONB,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        metadata JSONB
                     );
                 """)
                 
@@ -349,19 +359,18 @@ class DocumentProcessor:
                         id SERIAL PRIMARY KEY,
                         chunk_id INTEGER REFERENCES document_chunks(id),
                         json_content JSONB,
-                        metadata JSONB,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        metadata JSONB
                     );
                 """)
                 
+                # Create table_blocks table without created_at
                 cur.execute("""
                     CREATE TABLE table_blocks (
                         id SERIAL PRIMARY KEY,
                         chunk_id INTEGER REFERENCES document_chunks(id),
                         table_content JSONB,
                         headers TEXT[],
-                        metadata JSONB,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        metadata JSONB
                     );
                 """)
                 
