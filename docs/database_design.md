@@ -12,11 +12,9 @@ The main table for storing text content with vector embeddings:
 CREATE TABLE document_chunks (
     id SERIAL PRIMARY KEY,
     parent_id INTEGER REFERENCES document_chunks(id),
-    title TEXT,
     content TEXT,
     embedding vector(1024),
     metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -32,9 +30,7 @@ CREATE TABLE json_blocks (
     id SERIAL PRIMARY KEY,
     chunk_id INTEGER REFERENCES document_chunks(id),
     json_content JSONB,
-    description TEXT,
     metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -47,9 +43,7 @@ CREATE TABLE table_blocks (
     chunk_id INTEGER REFERENCES document_chunks(id),
     table_content JSONB,
     headers TEXT[],
-    description TEXT,
     metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 

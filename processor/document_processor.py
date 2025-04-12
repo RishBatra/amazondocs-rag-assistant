@@ -9,9 +9,10 @@ from scraper.scraper import get_side_bar_links, scrape_page
 import time
 import logging
 from config import TEXT_SPLITTER_CONFIG
+import os
 
 class DocumentProcessor:
-    def __init__(self, db_config: Dict[str, str], embedding_model: str = "BAAI/bge-large-en-v1.5"):
+    def __init__(self, db_config: Dict[str, str] = None, embedding_model: str = "BAAI/bge-large-en-v1.5"):
         """Initialize the document processor with database and embedding configurations"""
         # Configure logging to only show our custom logs
         logging.basicConfig(
@@ -34,13 +35,35 @@ class DocumentProcessor:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)  # Keep our logs at DEBUG level
         
+        # Load MCP config if db_config not provided
+        if db_config is None:
+            try:
+                with open('mcp.json', 'r') as f:
+                    mcp_config = json.load(f)
+                db_config = mcp_config['mcpServers']['webscraper-rag-chatbot']
+                # Convert MCP config to psycopg2 format
+                db_config = {
+                    'host': db_config['host'],
+                    'port': db_config['port'],
+                    'database': db_config['database'],
+                    'user': db_config['user'],
+                    'password': db_config['password']
+                }
+            except Exception as e:
+                self.logger.error(f"Failed to load MCP config: {str(e)}")
+                raise
+        
         self.db_config = db_config
         self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
         self.conn = self._create_db_connection()
         
     def _create_db_connection(self):
         """Create database connection"""
-        return psycopg2.connect(**self.db_config)
+        try:
+            return psycopg2.connect(**self.db_config)
+        except Exception as e:
+            self.logger.error(f"Failed to connect to database: {str(e)}")
+            raise
 
     def scrape_and_process_docs(self):
         """Scrape documentation and process all pages"""
@@ -164,14 +187,26 @@ class DocumentProcessor:
         try:
             self.logger.debug(f"Processing document from: {metadata.get('source', 'unknown')}")
             self.logger.debug(f"Content length: {len(content)}")
-            # Add ### before any pattern that matches the regex
-            pattern = r"(`\S+`)\s*(\S+)\s*\1\s*\2"
-            matches = re.finditer(pattern, content)
-            offset = 0
-            for match in matches:
-                start = match.start() + offset
-                content = content[:start] + "### " + content[start:]
-                offset += 4  # Length of "### "
+            # # First find and store all matches
+            # pattern = r"(`\S+`)\s*(\S+)\s*\1\s*\2"
+            # matches = list(re.finditer(pattern, content))
+            
+            # # First pass: Remove \n\n between first backtick and word
+            # for match in matches:
+            #     full_match = match.group(0)
+            #     backtick_part = match.group(1)
+            #     word_part = match.group(2)
+            #     # Replace \n\n between backtick and word with a single space
+            #     new_first_part = re.sub(r'(`\S+`)\s*\n\n+(\S+)', r'\1 \2', f"{backtick_part}\n\n{word_part}")
+            #     content = content.replace(full_match, full_match.replace(f"{backtick_part}\n\n{word_part}", new_first_part))
+            
+            # # Second pass: Add ### (existing logic)
+            # matches = re.finditer(pattern, content)
+            # offset = 0
+            # for match in Why do you eat like this when you can't say exactly what's typed later it's all inside the domestic air suspensionmatches:
+            #     start = match.start() + offset
+            #     content = content[:start] + "### " + content[start:]
+            #     offset += 4  # Length of "### "
             # Create chunks
             splitter = MarkdownHeaderTextSplitter(
                 headers_to_split_on=[
@@ -184,17 +219,78 @@ class DocumentProcessor:
             chunks = splitter.split_text(content)
 
             # Log chunks creation
-            self.logger.debug(f"Created {len(chunks)} chunks")
+            # self.logger.debug(f"Created {len(chunks)} chunks")
+            # self.logger.debug("=== Chunk Details ===")
+            # for i, chunk in enumerate(chunks):
+            #     self.logger.debug(f"\nChunk {i+1}:")
+            #     self.logger.debug(f"Metadata: {chunk.metadata}")
+            #     self.logger.debug(f"Content starts with: {chunk.page_content[:200]}")
+            #     self.logger.debug(f"Content length: {len(chunk.page_content)}")
+            #     self.logger.debug("=" * 50)
             
             with self.conn.cursor() as cur:
-                parent_id = None
-                current_level = 0
+                # Track the current section headers and their IDs
+                current_h1 = {'id': None, 'title': None}
+                current_h2 = {'id': None, 'title': None}
                 
                 for i, chunk in enumerate(chunks):
-                    self.logger.debug(f"Processing chunk {i+1}/{len(chunks)}")
-                    self.logger.debug(f"Chunk level: {chunk.metadata.get('level')}")
-                    self.logger.debug(f"Parent ID: {parent_id}")
-
+                    # Determine header level and content from metadata
+                    current_level = 0
+                    h1_title = chunk.metadata.get("Header 1")
+                    h2_title = chunk.metadata.get("Header 2")
+                    h3_title = chunk.metadata.get("Header 3")
+                    
+                    if h3_title:
+                        current_level = 3
+                    elif h2_title:
+                        current_level = 2
+                    elif h1_title:
+                        current_level = 1
+                    
+                    # If we have an H3 with a new H2 section, create the H2 node first
+                    if current_level == 3 and h2_title and (current_h2['title'] != h2_title):
+                        # Create H2 node
+                        h2_metadata = {
+                            "Header 1": h1_title,
+                            "Header 2": h2_title
+                        }
+                        
+                        cur.execute("""
+                            INSERT INTO document_chunks (parent_id, content, embedding, metadata)
+                            VALUES (%s, %s, %s, %s)
+                            RETURNING id
+                        """, (
+                            current_h1['id'],  # Parent is current H1
+                            f"## {h2_title}",  # Content is the header itself
+                            self.embeddings.embed_query(h2_title),
+                            Json(h2_metadata)
+                        ))
+                        
+                        result = cur.fetchone()
+                        current_h2['id'] = result[0]
+                        current_h2['title'] = h2_title
+                    
+                    # Get parent_id based on header level
+                    parent_id = None
+                    
+                    if current_level == 1:
+                        # H1 headers have no parent
+                        parent_id = None
+                        # Update current H1 and reset H2
+                        current_h1['title'] = h1_title
+                        current_h2 = {'id': None, 'title': None}
+                    elif current_level == 2:
+                        # H2 headers are children of current H1
+                        parent_id = current_h1['id']
+                        # Update current H2
+                        current_h2['title'] = h2_title
+                    elif current_level == 3:
+                        # H3 headers are children of current H2 if it exists
+                        if current_h2['id'] is not None and h2_title == current_h2['title']:
+                            parent_id = current_h2['id']
+                        else:
+                            parent_id = current_h1['id']
+                    
                     # Extract JSON and tables first and add chunk metadata to them
                     json_blocks = [
                         {**block, 'metadata': chunk.metadata} 
@@ -213,7 +309,7 @@ class DocumentProcessor:
                     # Generate embedding for the chunk
                     embedding = self.embeddings.embed_query(clean_text)
                     
-                    # Now use the embedding in the insert
+                    # Insert the chunk and get its ID
                     cur.execute("""
                         INSERT INTO document_chunks (parent_id, content, embedding, metadata)
                         VALUES (%s, %s, %s, %s)
@@ -226,15 +322,13 @@ class DocumentProcessor:
                     ))
                     
                     result = cur.fetchone()
-                    self.logger.debug(f"Insert result: {result}")
-                    
                     chunk_id = result[0]
-                    current_level = int(chunk.metadata.get('level', 1))
-                    if current_level > current_level:
-                        parent_id = chunk_id
-                    elif current_level < current_level:
-                        # TODO: Implement logic to find correct parent
-                        pass
+                    
+                    # Update the current section IDs
+                    if current_level == 1:
+                        current_h1['id'] = chunk_id
+                    elif current_level == 2:
+                        current_h2['id'] = chunk_id
                     
                     # Store associated JSON blocks
                     for json_block in json_blocks:
@@ -242,7 +336,11 @@ class DocumentProcessor:
                             cur.execute("""
                                 INSERT INTO json_blocks (chunk_id, json_content, metadata)
                                 VALUES (%s, %s, %s)
-                            """, (chunk_id, Json(json_block['content']), Json(metadata)))
+                            """, (
+                                chunk_id, 
+                                Json(json_block['content']), 
+                                Json(json_block['metadata'])  # Use Json adapter for metadata
+                            ))
 
                     # Store associated tables
                     for table in tables:
@@ -254,13 +352,14 @@ class DocumentProcessor:
                                 chunk_id,
                                 Json(table['content']),
                                 table['headers'],
-                                Json(metadata)
+                                Json(table['metadata'])  # Use Json adapter for metadata
                             ))
                     self.conn.commit()
 
             self.conn.commit()
         except Exception as e:
             self.logger.error(f"Error processing document: {str(e)}", exc_info=True)
+            self.conn.rollback()  # Rollback on error
             raise
 
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:

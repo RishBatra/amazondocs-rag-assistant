@@ -84,6 +84,8 @@ class TestDocumentProcessor(unittest.TestCase):
         
         # Use a test URL from your API docs
         test_url = "https://developer-docs.amazon.com/sp-api/docs/orders-api-v0-use-case-guide"
+        # test_url = "https://developer-docs.amazon.com/sp-api/docs/messaging-api-v1-reference"
+
         
         # Scrape the content
         content = scrape_page(test_url)
