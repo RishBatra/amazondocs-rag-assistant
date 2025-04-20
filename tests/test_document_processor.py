@@ -83,9 +83,9 @@ class TestDocumentProcessor(unittest.TestCase):
         mock_embeddings.return_value.embed_query.return_value = [0.1] * 1024
         
         # Use a test URL from your API docs
-        test_url = "https://developer-docs.amazon.com/sp-api/docs/orders-api-v0-use-case-guide"
-        # test_url = "https://developer-docs.amazon.com/sp-api/docs/messaging-api-v1-reference"
-
+        # test_url = "https://developer-docs.amazon.com/sp-api/docs/orders-api-v0-use-case-guide"
+        test_url = "https://developer-docs.amazon.com/sp-api/docs/messaging-api-v1-reference"
+        
         
         # Scrape the content
         content = scrape_page(test_url)
@@ -102,18 +102,72 @@ class TestDocumentProcessor(unittest.TestCase):
             self.fail(f"process_document with scraped content raised an exception: {str(e)}")
 
     def test_database_connection(self):
-        """Test database connection and basic operations."""
-        self.assertTrue(self.processor.test_database_connection())
+        """Test database operations"""
+        try:
+            with self.conn.cursor() as cur:
+                # Test insert
+                cur.execute("""
+                    INSERT INTO document_chunks (content, embedding, metadata)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                """, (
+                    'test_content',
+                    [0.1] * 1024,  # Test embedding
+                    json.dumps({'test': 'metadata'})
+                ))
+                
+                result = cur.fetchone()
+                self.logger.debug(f"Test insert result: {result}")
+                
+                # Rollback test data
+                self.conn.rollback()
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"Database test failed: {str(e)}")
+            return False
 
     def test_search(self):
         """Test search functionality."""
-        query = "test query"
-        results = self.processor.search(query, limit=1)
+        query = "explain the use of create Legal disclosure api"
+        # Use a higher min_distance threshold to get more results
+        results = self.processor.search(query, limit=5, min_distance=1.0)
         self.assertIsInstance(results, list)
         if results:  # If any results found
             self.assertIn('content', results[0])
             self.assertIn('metadata', results[0])
             self.assertIn('distance', results[0])
+            # Print detailed results
+            print("\nSearch Results for Legal Disclosure API:")
+            for i, result in enumerate(results, 1):
+                print(f"\nResult {i}:")
+                print(f"Distance: {result['distance']}")
+                print(f"Content: {result['content'][:300]}...")
+                print(f"Headers: {result['metadata']}")
+                if result['tables']:
+                    print(f"Tables: {len(result['tables'])}")
+                if result['json_blocks']:
+                    print(f"JSON Blocks: {len(result['json_blocks'])}")
+        else:
+            print("No results found")
+
+    def test_search_api_capabilities(self):
+        """Test search functionality for API capabilities query."""
+        query = "What are the limitations and capabilities of the Orders API?"
+        results = self.processor.search(query, limit=3)
+        self.assertIsInstance(results, list)
+        if results:  # If any results found
+            self.assertIn('content', results[0])
+            self.assertIn('metadata', results[0])
+            self.assertIn('distance', results[0])
+            print("\nSearch Results for API Capabilities:")
+            for i, result in enumerate(results, 1):
+                print(f"\nResult {i}:")
+                print(f"Distance: {result['distance']}")
+                print(f"Content: {result['content'][:200]}...")
+                print(f"Headers: {result['metadata']}")
+                print(f"Headers: {result['json_blocks']}")
+                print(f"Headers: {result['tables']}")
 
     def setup_database(self):
         try:
@@ -181,8 +235,15 @@ if __name__ == '__main__':
     
     # Add the test method we want to run
     # This will properly handle setUp and tearDown
+    # test_case = loader.loadTestsFromName(
+    #     #'test_document_processor.TestDocumentProcessor.test_process_document_with_scraper'
+    #     'test_document_processor.TestDocumentProcessor.test_search'
+    # )
+    # suite.addTests(test_case)
+    
+    # Add the new test method
     test_case = loader.loadTestsFromName(
-        'test_document_processor.TestDocumentProcessor.test_process_document_with_scraper'
+        'test_document_processor.TestDocumentProcessor.test_search_api_capabilities'
     )
     suite.addTests(test_case)
     

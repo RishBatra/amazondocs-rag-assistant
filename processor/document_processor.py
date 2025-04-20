@@ -362,19 +362,20 @@ class DocumentProcessor:
             self.conn.rollback()  # Rollback on error
             raise
 
-    def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 3, min_distance: float = 0.8) -> List[Dict[str, Any]]:
         """Search for relevant documents"""
         query_embedding = self.embeddings.embed_query(query)
         
         with self.conn.cursor() as cur:
-            # Search for relevant chunks
+            # Search for relevant chunks using vector similarity
             cur.execute("""
                 SELECT id, content, metadata,
-                       embedding <-> %s as distance
+                       embedding <-> %s::vector(1024) as distance
                 FROM document_chunks
+                WHERE embedding <-> %s::vector(1024) < %s
                 ORDER BY distance
                 LIMIT %s
-            """, (query_embedding, limit))
+            """, (query_embedding, query_embedding, min_distance, limit))
             
             results = []
             for row in cur.fetchall():
