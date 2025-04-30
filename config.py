@@ -25,6 +25,16 @@ EMBEDDING_MODEL_CONFIG = {
     "device": "cuda"
 }
 
+# Groq API Configuration
+GROQ_CONFIG = {
+    "api_key": os.environ.get("GROQ_API_KEY", "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"),  # Set your API key as environment variable
+    "model": "llama-3.3-70b-versatile",  # Default model
+    "temperature": 0.5,
+    "max_tokens": 8000,
+    "search_min_distance": 1.0,
+    "search_limit": 2,
+}
+
 # Text Splitting Configuration
 TEXT_SPLITTER_CONFIG = {
     "splitter_type": "MarkdownHeaderTextSplitter",

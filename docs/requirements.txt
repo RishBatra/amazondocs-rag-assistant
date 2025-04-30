@@ -3,11 +3,14 @@ trafilatura
 requests
 numpy
 sqlalchemy>=1.4.0
-psycopg2-binary
-pgvector - https://github.com/pgvector/pgvector?tab=readme-ov-file
-python-dotenv
-langchain
-openai
+psycopg2-binary>=2.9.9
+pgvector>=0.2.3
+python-dotenv>=1.0.0
+langchain>=0.2.11
+langchain-community>=0.2.9
+openai>=1.13.3
 transformers
 torch
 beautifulsoup4
+sentence-transformers>=2.5.0
+rich>=13.7.0

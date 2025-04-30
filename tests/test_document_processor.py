@@ -83,8 +83,9 @@ class TestDocumentProcessor(unittest.TestCase):
         mock_embeddings.return_value.embed_query.return_value = [0.1] * 1024
         
         # Use a test URL from your API docs
-        # test_url = "https://developer-docs.amazon.com/sp-api/docs/orders-api-v0-use-case-guide"
-        test_url = "https://developer-docs.amazon.com/sp-api/docs/messaging-api-v1-reference"
+        test_url = "https://developer-docs.amazon.com/sp-api/docs/orders-api-v0-use-case-guide"
+        # test_url = "https://developer-docs.amazon.com/sp-api/docs/messaging-api-v1-reference"
+        # test_url = "https://developer-docs.amazon.com/sp-api/docs/sales-api-v1-use-case-guide"
         
         
         # Scrape the content
@@ -131,7 +132,7 @@ class TestDocumentProcessor(unittest.TestCase):
         """Test search functionality."""
         query = "explain the use of create Legal disclosure api"
         # Use a higher min_distance threshold to get more results
-        results = self.processor.search(query, limit=5, min_distance=1.0)
+        results = self.processor.search(query, limit=2, min_distance=1.0)
         self.assertIsInstance(results, list)
         if results:  # If any results found
             self.assertIn('content', results[0])
@@ -226,6 +227,17 @@ class TestDocumentProcessor(unittest.TestCase):
             self.logger.error(f"Failed to set up database: {str(e)}", exc_info=True)
             return False
 
+    @patch('processor.document_processor.HuggingFaceEmbeddings')
+    @patch('scraper.scraper.scrape_page')
+    @patch('scraper.scraper.get_side_bar_links')
+    def test_scrape_and_process_docs(self, mock_get_side_bar_links, mock_scrape_page, mock_embeddings):
+        """Test scrape_and_process_docs with mocked sidebar links and page content."""
+        try:
+            self.processor.scrape_and_process_docs()
+            self.assertTrue(True)
+        except Exception as e:
+            self.fail(f"scrape_and_process_docs raised an exception: {str(e)}")
+
 if __name__ == '__main__':
     # Create a test loader
     loader = unittest.TestLoader()
@@ -236,14 +248,15 @@ if __name__ == '__main__':
     # Add the test method we want to run
     # This will properly handle setUp and tearDown
     # test_case = loader.loadTestsFromName(
-    #     #'test_document_processor.TestDocumentProcessor.test_process_document_with_scraper'
-    #     'test_document_processor.TestDocumentProcessor.test_search'
+    #     'test_document_processor.TestDocumentProcessor.test_process_document_with_scraper'
+    #     #'test_document_processor.TestDocumentProcessor.test_search'
     # )
     # suite.addTests(test_case)
     
     # Add the new test method
     test_case = loader.loadTestsFromName(
-        'test_document_processor.TestDocumentProcessor.test_search_api_capabilities'
+        # 'test_document_processor.TestDocumentProcessor.test_search_api_capabilities'
+        'test_document_processor.TestDocumentProcessor.test_scrape_and_process_docs'
     )
     suite.addTests(test_case)
     

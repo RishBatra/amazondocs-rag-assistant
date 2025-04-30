@@ -35,24 +35,6 @@ class DocumentProcessor:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)  # Keep our logs at DEBUG level
         
-        # Load MCP config if db_config not provided
-        if db_config is None:
-            try:
-                with open('mcp.json', 'r') as f:
-                    mcp_config = json.load(f)
-                db_config = mcp_config['mcpServers']['webscraper-rag-chatbot']
-                # Convert MCP config to psycopg2 format
-                db_config = {
-                    'host': db_config['host'],
-                    'port': db_config['port'],
-                    'database': db_config['database'],
-                    'user': db_config['user'],
-                    'password': db_config['password']
-                }
-            except Exception as e:
-                self.logger.error(f"Failed to load MCP config: {str(e)}")
-                raise
-        
         self.db_config = db_config
         self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
         self.conn = self._create_db_connection()
@@ -65,7 +47,7 @@ class DocumentProcessor:
             self.logger.error(f"Failed to connect to database: {str(e)}")
             raise
 
-    def scrape_and_process_docs(self):
+    def scrape_and_process_docs(self,limit: int = 10):
         """Scrape documentation and process all pages"""
         # Get all documentation URLs
         urls = get_side_bar_links()
@@ -74,9 +56,12 @@ class DocumentProcessor:
             return
         
         print(f"Found {len(urls)} URLs to process")
-        
+        count = 0
         # Process each URL
         for url in urls:
+            if count > limit:
+                break
+            count += 1
             try:
                 # Scrape the page
                 content = scrape_page(url)
@@ -188,25 +173,25 @@ class DocumentProcessor:
             self.logger.debug(f"Processing document from: {metadata.get('source', 'unknown')}")
             self.logger.debug(f"Content length: {len(content)}")
             # # First find and store all matches
-            # pattern = r"(`\S+`)\s*(\S+)\s*\1\s*\2"
-            # matches = list(re.finditer(pattern, content))
+            pattern = r"(`\S+`)\s*(\S+)\s*\1\s*\2"
+            matches = list(re.finditer(pattern, content))
             
-            # # First pass: Remove \n\n between first backtick and word
-            # for match in matches:
-            #     full_match = match.group(0)
-            #     backtick_part = match.group(1)
-            #     word_part = match.group(2)
-            #     # Replace \n\n between backtick and word with a single space
-            #     new_first_part = re.sub(r'(`\S+`)\s*\n\n+(\S+)', r'\1 \2', f"{backtick_part}\n\n{word_part}")
-            #     content = content.replace(full_match, full_match.replace(f"{backtick_part}\n\n{word_part}", new_first_part))
+            # First pass: Remove \n\n between first backtick and word
+            for match in matches:
+                full_match = match.group(0)
+                backtick_part = match.group(1)
+                word_part = match.group(2)
+                # Replace \n\n between backtick and word with a single space
+                new_first_part = re.sub(r'(`\S+`)\s*\n\n+(\S+)', r'\1 \2', f"{backtick_part}\n\n{word_part}")
+                content = content.replace(full_match, full_match.replace(f"{backtick_part}\n\n{word_part}", new_first_part))
             
             # # Second pass: Add ### (existing logic)
-            # matches = re.finditer(pattern, content)
-            # offset = 0
-            # for match in Why do you eat like this when you can't say exactly what's typed later it's all inside the domestic air suspensionmatches:
-            #     start = match.start() + offset
-            #     content = content[:start] + "### " + content[start:]
-            #     offset += 4  # Length of "### "
+            matches = re.finditer(pattern, content)
+            offset = 0
+            for match in matches:
+                start = match.start() + offset
+                content = content[:start] + "### " + content[start:]
+                offset += 4  # Length of "### "
             # Create chunks
             splitter = MarkdownHeaderTextSplitter(
                 headers_to_split_on=[
@@ -362,7 +347,7 @@ class DocumentProcessor:
             self.conn.rollback()  # Rollback on error
             raise
 
-    def search(self, query: str, limit: int = 3, min_distance: float = 0.8) -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 3, min_distance: float = 0.70) -> List[Dict[str, Any]]:
         """Search for relevant documents"""
         query_embedding = self.embeddings.embed_query(query)
         
@@ -382,12 +367,12 @@ class DocumentProcessor:
                 chunk_id, content, metadata, distance = row
                 
                 # Get associated JSON blocks
-                cur.execute("SELECT json_content FROM json_blocks WHERE chunk_id = %s", (chunk_id,))
-                json_blocks = [r[0] for r in cur.fetchall()]
+                cur.execute("SELECT json_content, metadata FROM json_blocks WHERE chunk_id = %s", (chunk_id,))
+                json_blocks = [{"content": r[0], "metadata": r[1]} for r in cur.fetchall()]
                 
                 # Get associated tables
-                cur.execute("SELECT table_content, headers FROM table_blocks WHERE chunk_id = %s", (chunk_id,))
-                tables = [{"content": r[0], "headers": r[1]} for r in cur.fetchall()]
+                cur.execute("SELECT table_content, headers, metadata FROM table_blocks WHERE chunk_id = %s", (chunk_id,))
+                tables = [{"content": r[0], "headers": r[1], "metadata": r[2]} for r in cur.fetchall()]
                 
                 results.append({
                     "content": content,
