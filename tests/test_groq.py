@@ -2,7 +2,8 @@ from groq import Groq
 import os
 
 # The API key is already in your config.py
-api_key = os.environ.get("GROQ_API_KEY", "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")
+from config import GROQ_CONFIG
+api_key = GROQ_CONFIG["api_key"]
 
 # Initialize the Groq client
 client = Groq(api_key=api_key)
