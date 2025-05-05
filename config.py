@@ -27,7 +27,7 @@ EMBEDDING_MODEL_CONFIG = {
 
 # Groq API Configuration
 GROQ_CONFIG = {
-    "api_key": os.environ.get("GROQ_API_KEY", "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"),  # Set your API key as environment variable
+    "api_key": os.environ.get("GROQ_API_KEY", "Your API key here"),  # Set your API key as environment variable
     "model": "llama-3.3-70b-versatile",  # Default model
     "temperature": 0.5,
     "max_tokens": 8000,
