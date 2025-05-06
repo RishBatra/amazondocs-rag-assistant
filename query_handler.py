@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from transformers import AutoTokenizer, AutoModel
 import torch
 from processor.document_processor import DocumentProcessor
-from config import DB_CONFIG, EMBEDDING_MODEL_CONFIG, GROQ_CONFIG
+from config import DB_CONFIG, EMBEDDING_MODEL_CONFIG, GROQ_CONFIG, SEARCH_MODE, SYSTEM_PROMPT, NO_RESULTS_MESSAGE, FALLBACK_CONTEXT_MESSAGE
 import logging
 import os
 from groq import Groq
@@ -74,15 +74,27 @@ class QueryHandler:
     def get_response(self, query: str, min_distance: float = 0.8, limit: int = 1) -> str:
         """Get response for a query using RAG approach"""
         try:
-            # Get relevant documents
-            search_results = self.doc_processor.search(
-                query=query,
-                min_distance=min_distance,
-                limit=limit
-            )
+            # Get relevant documents based on SEARCH_MODE
+            if SEARCH_MODE == "hybrid":
+                search_results = self.doc_processor.hybrid_search(
+                    query=query,
+                    min_distance=min_distance,
+                    limit=limit
+                )
+            elif SEARCH_MODE == "keyword":
+                search_results = self.doc_processor.keyword_search(
+                    query=query,
+                    limit=limit
+                )
+            else:  # Default to semantic
+                search_results = self.doc_processor.search(
+                    query=query,
+                    min_distance=min_distance,
+                    limit=limit
+                )
             
             if not search_results:
-                return "I couldn't find any relevant information in the documentation to answer your question."
+                return NO_RESULTS_MESSAGE
             
             # Format context from search results
             context = self.format_context(search_results)
@@ -97,7 +109,7 @@ class QueryHandler:
                     response = self.groq_client.chat.completions.create(
                         model=GROQ_CONFIG["model"],
                         messages=[
-                            {"role": "system", "content": "You are a helpful assistant for Amazon API documentation."},
+                            {"role": "system", "content": SYSTEM_PROMPT},
                             {"role": "user", "content": prompt}
                         ],
                         temperature=GROQ_CONFIG["temperature"],
@@ -107,7 +119,7 @@ class QueryHandler:
                 except Exception as e:
                     self.logger.error(f"Error using Groq API: {str(e)}")
                     # Fall back to using context directly if Groq fails
-                    return f"Based on the documentation, here's what I found: {context}"
+                    return FALLBACK_CONTEXT_MESSAGE.format(context=context)
             # else:
             #     # Fallback to old method if Groq client not available
             #     inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(self.device)

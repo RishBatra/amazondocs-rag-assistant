@@ -47,7 +47,7 @@ class DocumentProcessor:
             self.logger.error(f"Failed to connect to database: {str(e)}")
             raise
 
-    def scrape_and_process_docs(self,limit: int = 10):
+    def scrape_and_process_docs(self,limit):
         """Scrape documentation and process all pages"""
         # Get all documentation URLs
         urls = get_side_bar_links()
@@ -350,9 +350,7 @@ class DocumentProcessor:
     def search(self, query: str, limit: int = 3, min_distance: float = 0.70) -> List[Dict[str, Any]]:
         """Search for relevant documents"""
         query_embedding = self.embeddings.embed_query(query)
-        
         with self.conn.cursor() as cur:
-            # Search for relevant chunks using vector similarity
             cur.execute("""
                 SELECT id, content, metadata,
                        embedding <-> %s::vector(1024) as distance
@@ -361,27 +359,98 @@ class DocumentProcessor:
                 ORDER BY distance
                 LIMIT %s
             """, (query_embedding, query_embedding, min_distance, limit))
-            
             results = []
             for row in cur.fetchall():
                 chunk_id, content, metadata, distance = row
-                
-                # Get associated JSON blocks
                 cur.execute("SELECT json_content, metadata FROM json_blocks WHERE chunk_id = %s", (chunk_id,))
                 json_blocks = [{"content": r[0], "metadata": r[1]} for r in cur.fetchall()]
-                
-                # Get associated tables
                 cur.execute("SELECT table_content, headers, metadata FROM table_blocks WHERE chunk_id = %s", (chunk_id,))
                 tables = [{"content": r[0], "headers": r[1], "metadata": r[2]} for r in cur.fetchall()]
-                
                 results.append({
+                    "id": chunk_id,
                     "content": content,
                     "metadata": metadata,
                     "json_blocks": json_blocks,
                     "tables": tables,
                     "distance": distance
                 })
-                
+            return results
+
+    def hybrid_search(self, query: str, limit: int = 5, min_distance: float = 1.5) -> List[Dict[str, Any]]:
+        """Hybrid search: combine semantic and keyword search results, deduplicated, sorted by semantic distance if available."""
+        # 1. Semantic search
+        semantic_results = self.search(query, limit=limit, min_distance=min_distance)
+        semantic_ids = {r.get('id') for r in semantic_results if r.get('id') is not None}
+
+        # 2. Keyword search (ILIKE on content)
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, content, metadata
+                FROM document_chunks
+                WHERE content ILIKE %s
+                LIMIT %s
+                """,
+                (f"%{query}%", limit)
+            )
+            keyword_rows = cur.fetchall()
+            keyword_results = []
+            for row in keyword_rows:
+                chunk_id, content, metadata = row
+                # Get associated JSON blocks
+                cur.execute("SELECT json_content, metadata FROM json_blocks WHERE chunk_id = %s", (chunk_id,))
+                json_blocks = [{"content": r[0], "metadata": r[1]} for r in cur.fetchall()]
+                # Get associated tables
+                cur.execute("SELECT table_content, headers, metadata FROM table_blocks WHERE chunk_id = %s", (chunk_id,))
+                tables = [{"content": r[0], "headers": r[1], "metadata": r[2]} for r in cur.fetchall()]
+                keyword_results.append({
+                    "id": chunk_id,
+                    "content": content,
+                    "metadata": metadata,
+                    "json_blocks": json_blocks,
+                    "tables": tables,
+                    # No semantic distance for keyword results
+                })
+
+        # 3. Merge, deduplicate by id (semantic results take precedence)
+        merged = {r.get('id'): r for r in semantic_results if r.get('id') is not None}
+        for r in keyword_results:
+            if r.get('id') is not None and r.get('id') not in merged:
+                merged[r.get('id')] = r
+        # 4. Sort: semantic results first by distance, then keyword results
+        sorted_results = sorted(
+            merged.values(),
+            key=lambda r: r.get('distance', float('inf'))
+        )
+        return sorted_results[:limit]
+
+    def keyword_search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Keyword search (ILIKE) on content, returns results in the same format as other search methods."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, content, metadata
+                FROM document_chunks
+                WHERE content ILIKE %s
+                LIMIT %s
+                """,
+                (f"%{query}%", limit)
+            )
+            rows = cur.fetchall()
+            results = []
+            for row in rows:
+                chunk_id, content, metadata = row
+                cur.execute("SELECT json_content, metadata FROM json_blocks WHERE chunk_id = %s", (chunk_id,))
+                json_blocks = [{"content": r[0], "metadata": r[1]} for r in cur.fetchall()]
+                cur.execute("SELECT table_content, headers, metadata FROM table_blocks WHERE chunk_id = %s", (chunk_id,))
+                tables = [{"content": r[0], "headers": r[1], "metadata": r[2]} for r in cur.fetchall()]
+                results.append({
+                    "id": chunk_id,
+                    "content": content,
+                    "metadata": metadata,
+                    "json_blocks": json_blocks,
+                    "tables": tables,
+                })
             return results
 
     def close(self):

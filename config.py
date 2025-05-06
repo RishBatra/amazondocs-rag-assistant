@@ -27,12 +27,12 @@ EMBEDDING_MODEL_CONFIG = {
 
 # Groq API Configuration
 GROQ_CONFIG = {
-    "api_key": os.environ.get("GROQ_API_KEY", "Your API key here"),  # Set your API key as environment variable
+    "api_key": os.environ.get("GROQ_API_KEY"),  # Set your API key as environment variable
     "model": "llama-3.3-70b-versatile",  # Default model
     "temperature": 0.5,
     "max_tokens": 8000,
-    "search_min_distance": 1.0,
-    "search_limit": 2,
+    "search_min_distance": 1.5,
+    "search_limit": 5,
 }
 
 # Text Splitting Configuration
@@ -77,3 +77,14 @@ SCRAPING_CONFIG = {
         }
     }
 }
+
+# Search mode configuration
+SEARCH_MODE = os.environ.get("SEARCH_MODE", "semantic")  # Options: 'semantic', 'keyword', 'hybrid'
+
+# User-facing messages and prompts
+SYSTEM_PROMPT = "You are a helpful assistant for an API documentation. The docdumentation contains API text descriptions, tables and jsons samples for request, response and error codes. Use the provided context to answer as accurately as possible."
+NO_RESULTS_MESSAGE = "I couldn't find any relevant information in the documentation to answer your question."
+FALLBACK_CONTEXT_MESSAGE = "Based on the documentation, here's what I found: {context}"
+
+# Scrape and process docs limit
+SCRAPE_PROCESS_LIMIT = int(os.environ.get("SCRAPE_PROCESS_LIMIT", 10))

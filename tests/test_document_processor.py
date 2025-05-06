@@ -233,7 +233,7 @@ class TestDocumentProcessor(unittest.TestCase):
     def test_scrape_and_process_docs(self, mock_get_side_bar_links, mock_scrape_page, mock_embeddings):
         """Test scrape_and_process_docs with mocked sidebar links and page content."""
         try:
-            self.processor.scrape_and_process_docs()
+            self.processor.scrape_and_process_docs(500)
             self.assertTrue(True)
         except Exception as e:
             self.fail(f"scrape_and_process_docs raised an exception: {str(e)}")

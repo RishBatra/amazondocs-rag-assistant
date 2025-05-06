@@ -49,36 +49,18 @@ def main():
                 search_query = user_input
 
             # Get RAG context for the user query
-            results = handler.doc_processor.search(
+            assistant_reply = handler.get_response(
                 search_query,
                 min_distance=GROQ_CONFIG.get("search_min_distance", 1.0),
                 limit=GROQ_CONFIG.get("search_limit", 2)
             )
-            if not results:
-                context = "I'm sorry, I couldn't find any relevant information in the documentation for your query."
-            else:
-                context = handler.format_context(results)
-            # Add context as a system message (so model can use it)
-            conversation.append({"role": "system", "content": f"Context: {context}"})
-            # Add user message
-            conversation.append({"role": "user", "content": user_input})
-            # Call Groq API with full conversation
-            try:
-                response = handler.groq_client.chat.completions.create(
-                    model=handler.groq_client.model if hasattr(handler.groq_client, 'model') else "llama-3.3-70b-versatile",
-                    messages=conversation,
-                    temperature=GROQ_CONFIG.get("temperature", 0.5),
-                    max_tokens=GROQ_CONFIG.get("max_tokens", 8000)
-                )
-                assistant_reply = response.choices[0].message.content
-            except Exception as e:
-                assistant_reply = f"[Error from Groq API: {str(e)}]"
             print(f"AI: {assistant_reply}\n")
-            # Add assistant reply to conversation
+            # Add user and assistant messages to conversation for context
+            conversation.append({"role": "user", "content": user_input})
             conversation.append({"role": "assistant", "content": assistant_reply})
-            # Update last query and result for next turn
+            # Update last query and result for next turn (optional, can be left as None)
             last_user_query = user_input
-            last_search_result = results
+            last_search_result = None
     finally:
         handler.close()
 

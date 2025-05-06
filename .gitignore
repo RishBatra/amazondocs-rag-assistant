@@ -10,6 +10,7 @@ Lib/
 Scripts/
 pyvenv.cfg
 *.cfg
+.env
 
 # IDE
 .vscode/
