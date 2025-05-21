@@ -2,13 +2,32 @@
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13+-blue.svg)](https://www.postgresql.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Retrieval-Augmented Generation (RAG) chatbot for Amazon API documentation that provides accurate answers to user queries by scraping, processing, and retrieving relevant Amazon API documentation.
 
+<!-- Options for adding a video demo: -->
+
+<!-- Option 1: Link to YouTube with thumbnail -->
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/your-username/your-repo/assets/your-asset-id/chatbot-example.png" alt="Chatbot Example" width="600">
+  <a href="https://www.youtube.com/watch?v=your-video-id" target="_blank">
+    <img src="https://img.youtube.com/vi/your-video-id/0.jpg" alt="Chatbot Demo Video" width="600">
+  </a>
+  <br>
+  <em>▶️ Click to watch demo video</em>
 </p>
+
+<!-- Option 2: Animated GIF (best for GitHub README) -->
+<!-- 
+<p align="center">
+  <img src="path/to/your/demo.gif" alt="Chatbot Demo" width="600">
+</p>
+-->
+
+<!-- Option 3: GitHub video embedding (works if video is in your repo) -->
+<!--
+<video src="https://github.com/yourusername/your-repo/assets/your-asset-id/chatbot-demo.mp4" controls="controls" muted="muted" style="max-width:600px;">
+</video>
+-->
 
 ## 📋 Table of Contents
 
@@ -182,10 +201,6 @@ The system supports three search modes:
 - **Database**: PostgreSQL with vector extension
 - **LLM Integration**: Groq API (llama-3.3-70b-versatile)
 - **Text Processing**: Regular expressions, Markdown parsing
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## 🙏 Acknowledgements
 
