@@ -2,10 +2,11 @@ from typing import List, Dict, Any
 from transformers import AutoTokenizer, AutoModel
 import torch
 from processor.document_processor import DocumentProcessor
-from config import DB_CONFIG, EMBEDDING_MODEL_CONFIG, GROQ_CONFIG, SEARCH_MODE, SYSTEM_PROMPT, NO_RESULTS_MESSAGE, FALLBACK_CONTEXT_MESSAGE
+from config import DB_CONFIG, EMBEDDING_MODEL_CONFIG, GROQ_CONFIG, SEARCH_MODE, SYSTEM_PROMPT, NO_RESULTS_MESSAGE, FALLBACK_CONTEXT_MESSAGE, QUERY_WRITER_PROMPT, EVALUATOR_PROMPT
 import logging
 import os
 from groq import Groq
+from scraper.utils import extract_xml
 
 class QueryHandler:
     def __init__(self):
@@ -70,11 +71,97 @@ class QueryHandler:
         Question: {query}
 
         Answer: Let me help you with that."""
+    
+    def query_writer(self, search_results, query, previous_attempts: str = "") -> tuple[str,str]:
+        """This method rewrites the user query and incorporates the feedback from evaluator.
+        Args:
+        search_results: The results received from vector search using the given query
+        query: The query used for searching
+        context: Previous attempts and its feedback 
+        """
 
-    def get_response(self, query: str, min_distance: float = 0.8, limit: int = 1) -> str:
-        """Get response for a query using RAG approach"""
-        try:
-            # Get relevant documents based on SEARCH_MODE
+        full_prompt = f"""{QUERY_WRITER_PROMPT}
+        <originalUserQuery>
+        {query}
+        </originalUserQuery>
+
+        <search>
+
+        {previous_attempts} """ if previous_attempts else f"""
+        
+        """
+        
+
+
+        
+        
+
+    def query_evaluator(self, search_results, query) -> tuple[str, str]:
+        """This method cheks the search results for relevance.
+        If the results are not relevant it gives feedback to mdoify the query.
+
+        Args:
+        search_results: The results received from vector search using the given query
+        query: The query used for searching
+        """
+        full_prompt = EVALUATOR_PROMPT + f"""
+        <searchResults>
+        {search_results}
+        </searchResults>
+
+        <query>
+        {query}
+        </query>
+        """
+        response = self.call_llm(full_prompt)
+        evaluation = extract_xml(response, "evaluation")
+        feedback = extract_xml(response, "feedback")
+        self.logger("=== EVALUATION START ===")
+        self.logger(f"Status {evaluation}")
+        self.logger(f"Feedback {feedback}")
+        self.logger("=== EVALUATION END ===")
+
+        return evaluation, feedback
+    
+    def loop(self, query: str, search_results: str) -> tuple[str, list[dict]]:
+        memory = []
+        chain_of_thought = []
+
+        thoughts, generated_query = self.query_writer(search_results, query)
+
+
+
+
+
+    def call_llm(self, prompt: str, system_prompt: str = "", model = GROQ_CONFIG["model"]) -> str:
+        """
+        Calls the model with the given prompt and returns th response.
+
+        Args:
+        prompt (str): The user prompt.
+        system_prompt
+        """
+        if self.groq_client:
+                try:
+                    # Call Groq API
+                    response = self.groq_client.chat.completions.create(
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=GROQ_CONFIG["temperature"],
+                        max_tokens=GROQ_CONFIG["max_tokens"]
+                    )
+                    return response.choices[0].message.content
+                except Exception as e:
+                    self.logger.error(f"Error using Groq API: {str(e)}")
+                    # Fall back to using context directly if Groq fails
+                    return FALLBACK_CONTEXT_MESSAGE
+
+
+    def get_search_results(self, query, min_distance, limit) -> str:
+        
+        # Get relevant documents based on SEARCH_MODE
             if SEARCH_MODE == "hybrid":
                 search_results = self.doc_processor.hybrid_search(
                     query=query,
@@ -95,6 +182,17 @@ class QueryHandler:
             
             if not search_results:
                 return NO_RESULTS_MESSAGE
+            else:
+                return search_results
+            
+
+
+
+    def get_response(self, query: str, min_distance: float = 0.8, limit: int = 1) -> str:
+        """Get response for a query using RAG approach"""
+        try:
+            # Get relevant documents based on SEARCH_MODE
+            search_results = self.get_search_results(query , min_distance, limit)
             
             # Format context from search results
             context = self.format_context(search_results)

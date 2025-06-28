@@ -85,6 +85,37 @@ SEARCH_MODE = os.environ.get("SEARCH_MODE", "semantic")  # Options: 'semantic', 
 SYSTEM_PROMPT = "You are a helpful assistant for an API documentation. The docdumentation contains API text descriptions, tables and jsons samples for request, response and error codes. Use the provided context to answer as accurately as possible."
 NO_RESULTS_MESSAGE = "I couldn't find any relevant information in the documentation to answer your question."
 FALLBACK_CONTEXT_MESSAGE = "Based on the documentation, here's what I found: {context}"
+QUERY_WRITER_PROMPT = """
+Your task is to rewrite the user query so it can be used to optimize symeantic search.
+1. Write the query in technical documentation style.
+2. The length of the prompt should be similar to the length of the user query.
+3. If there is feedback from your previous generations, you should reflect on them to improve your solution
+
+Output your answer concisely in the following format: 
+
+<thoughts>
+[Your understanding of the task and feedback and how you plan to improve]
+</thoughts>
+
+<response>
+[Your query here]
+</response>
+"""
+
+EVALUATOR_PROMPT = """
+Evaluate this query for its effectiveness in semantic search.
+Evaluation criteria - 
+1. Search results should be relevant to the user query. If user asks "Give me the JSON response for XYZ API", the response should be present in search results.
+
+You should be evaluating only and not attemping to solve the task.
+Only output "PASS" if all criteria are met and you have no further suggestions for improvements.
+Output your evaluation concisely in the following format.
+
+<evaluation>PASS, NEEDS_IMPROVEMENT, or FAIL</evaluation>
+<feedback>
+What needs improvement and why.
+</feedback>
+"""
 
 # Scrape and process docs limit
 SCRAPE_PROCESS_LIMIT = int(os.environ.get("SCRAPE_PROCESS_LIMIT", 10))
